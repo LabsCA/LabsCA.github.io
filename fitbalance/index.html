@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>FitBalance</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#00D09E">
+  <meta name="description" content="Tu referencia diaria para cumplir tu dieta.">
+  <!-- Todo es relativo a /fitbalance/: no toca el resto de labsca.github.io -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="FitBalance">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --pri:#00D09E; --ink:#052224; --bg:#F1FFF3; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; background:var(--pri); font-family:Poppins, system-ui, sans-serif; color:var(--ink); overflow:hidden; }
+    #app { position:fixed; inset:0; top:env(safe-area-inset-top); width:100%; height:calc(100% - env(safe-area-inset-top)); border:0; background:var(--pri); }
+    #splash { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:var(--pri); transition:opacity .35s; z-index:2; }
+    #splash img { width:96px; height:96px; border-radius:28px; box-shadow:0 10px 30px rgba(5,34,36,.18); }
+    #splash > b { font-size:26px; font-weight:700; }
+    #aviso p b { font-size:inherit; }
+    #aviso > p:first-of-type b { font-size:22px; }
+    #splash small { opacity:.75; }
+    #splash.fuera { opacity:0; pointer-events:none; }
+    #instalar { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:3; background:var(--bg); border-radius:22px; padding:14px 16px; display:none; gap:12px; align-items:center; box-shadow:0 8px 30px rgba(5,34,36,.25); font-size:14px; line-height:1.35; }
+    #instalar.ver { display:flex; }
+    #instalar img { width:44px; height:44px; border-radius:12px; flex:none; }
+    #instalar p { margin:0; flex:1; }
+    #instalar button { border:0; border-radius:999px; padding:9px 14px; font:600 13.5px Poppins, sans-serif; cursor:pointer; }
+    #btnInstalar { background:var(--pri); color:var(--ink); }
+    #btnCerrar { background:transparent; color:var(--ink); padding:9px 6px; }
+    #aviso { padding:24px; max-width:380px; text-align:center; }
+    #aviso button { border:0; border-radius:999px; padding:12px 18px; margin:4px; font:600 14px Poppins, sans-serif; cursor:pointer; background:var(--ink); color:var(--pri); }
+    #aviso button.sec { background:transparent; color:var(--ink); border:2px solid var(--ink); }
+  </style>
+</head>
+<body>
+  <div id="splash"><img src="icon-512.png" alt=""><b>FitBalance</b><small>Cargando…</small></div>
+  <iframe id="app" title="FitBalance" allow="camera; clipboard-write" referrerpolicy="no-referrer"></iframe>
+
+  <div id="instalar" role="dialog" aria-label="Instalar FitBalance">
+    <img src="icon-192.png" alt="">
+    <p id="txtInstalar"></p>
+    <button id="btnInstalar" hidden>Instalar</button>
+    <button id="btnCerrar" aria-label="Cerrar">✕</button>
+  </div>
+
+  <script>
+  // ================== CONFIGURACIÓN ==================
+  // URL de la app web principal (termina en /exec)
+  var MAIN_URL = 'PEGA_AQUI_LA_URL_PRINCIPAL';
+  // ===================================================
+
+  // labsca.github.io comparte almacenamiento con tu otro proyecto:
+  // por eso todas las claves llevan el prefijo "fitbalance_".
+  var K_SES = 'fitbalance_s', K_REC = 'fitbalance_recordar', K_INST = 'fitbalance_no_instalar';
+  var ls = {
+    get: function (k) { try { return localStorage.getItem(k) || sessionStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v, recordar) {
+      try { (recordar ? localStorage : sessionStorage).setItem(k, v); (recordar ? sessionStorage : localStorage).removeItem(k); } catch (e) { }
+    },
+    del: function (k) { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) { } }
+  };
+
+  var app = document.getElementById('app'), splash = document.getElementById('splash');
+
+  if (/PEGA_AQUI/.test(MAIN_URL)) {
+    splash.innerHTML = '<div id="aviso"><b>Falta configurar</b><p>Escribe la URL principal de FitBalance en <code>MAIN_URL</code> dentro de <code>fitbalance/index.html</code>.</p></div>';
+  } else {
+    // 1) ¿Venimos del Login? Trae ?t=token. Lo quitamos de la barra para que no quede en el historial.
+    var q = new URLSearchParams(location.search), t = q.get('t'), url = MAIN_URL + '?w=1';
+    if (t) {
+      history.replaceState(null, '', location.pathname);
+      url += '&t=' + encodeURIComponent(t);
+    } else if (ls.get(K_SES)) {
+      // 2) Sesión guardada en ESTE sitio (el iframe de Google no siempre puede guardar en iPhone).
+      url += '&s=' + encodeURIComponent(ls.get(K_SES));
+    }
+    app.src = url;
+    // La pantalla verde se queda hasta que la app avise "listo".
+    // El evento load del iframe no sirve: también se dispara cuando Google muestra un error o una página en blanco.
+    var subt = splash.querySelector('small');
+    setTimeout(function () { if (!listo) subt.textContent = 'Preparando FitBalance… la primera vez tarda hasta 30 segundos.'; }, 6000);
+    setTimeout(function () { if (!listo) noAbrio(); }, 40000);
+  }
+
+  var listo = false;
+  function quitarSplash() { listo = true; splash.classList.add('fuera'); }
+  function noAbrio() {
+    splash.innerHTML = '<div id="aviso"><img src="icon-192.png" alt="" style="width:72px;height:72px;border-radius:20px"><p><b>FitBalance no respondió</b></p>' +
+      '<p style="font-size:14px;text-align:left">Suele pasar cuando hay <b>varias cuentas de Google</b> abiertas en el navegador. Prueba:<br>' +
+      '1. Abrir esta página en una ventana de incógnito.<br>2. Cerrar sesión en tus otras cuentas de Google.<br>3. Usar un perfil de Chrome solo para FitBalance.</p>' +
+      '<p><button id="btnReintentar">Reintentar</button> <button id="btnDirecto" class="sec">Abrir sin pantalla completa</button></p></div>';
+    document.getElementById('btnReintentar').onclick = function () { location.reload(); };
+    document.getElementById('btnDirecto').onclick = function () { location.href = MAIN_URL; };
+  }
+
+  // La app avisa cuándo guardar o borrar la sesión.
+  window.addEventListener('message', function (e) {
+    if (!/^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/.test(e.origin) && e.origin !== 'https://script.google.com') return;
+    var d = e.data || {};
+    if (d.fitbalance === 'listo') quitarSplash();
+    else if (d.fitbalance === 'sesion' && typeof d.s === 'string') {
+      ls.set(K_REC, d.recordar ? '1' : '0', true);
+      ls.set(K_SES, d.s, !!d.recordar);
+    } else if (d.fitbalance === 'salir') {
+      ls.del(K_SES);
+    }
+  });
+
+  // ---------- Invitación a instalar ----------
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  var ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var caja = document.getElementById('instalar'), txt = document.getElementById('txtInstalar'), btn = document.getElementById('btnInstalar');
+  var promptGuardado = null;
+  function mostrar(texto) {
+    if (standalone || ls.get(K_INST)) return;
+    txt.innerHTML = texto; caja.classList.add('ver');
+  }
+  document.getElementById('btnCerrar').onclick = function () { caja.classList.remove('ver'); ls.set(K_INST, '1', true); };
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault(); promptGuardado = e; btn.hidden = false;
+    mostrar('<b>Instala FitBalance</b><br>Ábrela desde tu pantalla de inicio, a pantalla completa.');
+  });
+  btn.onclick = function () {
+    if (!promptGuardado) return;
+    promptGuardado.prompt();
+    promptGuardado.userChoice.finally(function () { caja.classList.remove('ver'); promptGuardado = null; });
+  };
+  if (ios) setTimeout(function () {
+    mostrar('<b>Instala FitBalance</b><br>Toca <b>Compartir</b> y luego <b>Agregar a pantalla de inicio</b>.');
+  }, 2500);
+  </script>
+</body>
+</html>
